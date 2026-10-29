@@ -1,26 +1,4 @@
-#include "fan_controller.h"
 
-#include <algorithm>
-#include <math.h>
-
-#include "esp_log.h"
-#include "nvs_config.h"
-
-static const char* TAG = "fan_ctrl";
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-void FanController::applyConfig(int ch)
-{
-    if (!m_pid[ch]) return;
-
-    float p = m_config[ch].pid.p / 100.0f;
-    float i = m_config[ch].pid.i / 100.0f;
-    float d = m_config[ch].pid.d / 100.0f;
-
-    m_pid[ch]->SetTunings(p, i, d);
     m_pid[ch]->SetTarget(static_cast<float>(m_config[ch].pid.targetTemp));
 
     ESP_LOGI(TAG, "ch%d PID: target=%.1f°C p=%.2f i=%.2f d=%.2f",
@@ -37,7 +15,7 @@ void FanController::init(Board* board, int sampleTimeMs)
     m_sampleTimeMs = sampleTimeMs;
     m_numChannels  = std::min(board->getNumFans(), MAX_FANS);
 
-    ESP_LOGI(TAG, "initialising for %d fan channel(s)", m_numChannels);
+    ESP_LOGI(TAG, "initialising for %d fan channel(s) - FORCED MAX MODIFIED", m_numChannels);
 
     // Load config from NVS (PID instances don't exist yet, applyConfig is skipped)
     loadSettings();
@@ -53,7 +31,10 @@ void FanController::init(Board* board, int sampleTimeMs)
         m_pid[ch] = new PID(&m_pidInput[ch], &m_pidOutput[ch], &m_pidTarget[ch],
                             p, i, d, PID_P_ON_E, PID_DIRECT);
         m_pid[ch]->SetSampleTime(sampleTimeMs);
-        m_pid[ch]->SetOutputLimits(15, 100);
+        
+        // 【修改 1】：強行修改輸出上下限，封鎖低速，PID 無論點算都只能輸出 100%
+        m_pid[ch]->SetOutputLimits(100, 100); 
+        
         m_pid[ch]->SetMode(PID_AUTOMATIC);
         m_pid[ch]->SetControllerDirection(PID_REVERSE);
         m_pid[ch]->Initialize();
@@ -127,7 +108,9 @@ void FanController::update(float chipTempMax, float vrTemp)
         }
         m_overheated[ch] = false;
 
-        // Normal control
+        // 【修改 2】：直接註解/無視原本的 switch mode 判斷
+        // 無論網頁目前是什麼設定，一律硬編碼（Hardcode）逼入 100% 瘋狂輸出
+        /*
         switch (m_config[ch].mode) {
         case Mode::MANUAL:
             m_fanPerc[ch] = m_config[ch].manualSpeed;
@@ -140,8 +123,11 @@ void FanController::update(float chipTempMax, float vrTemp)
             m_fanPerc[ch] = 100;
             break;
         }
+        */
 
-        m_board->setFanSpeedCh(ch, static_cast<float>(m_fanPerc[ch]) / 100.0f);
+        // 暴力全速覆蓋
+        m_fanPerc[ch] = 100;
+        m_board->setFanSpeedCh(ch, 1.0f); // 1.0f 代表發出 100% 滿轉的 PWM 訊號
     }
 }
 

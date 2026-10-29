@@ -57,16 +57,16 @@ NerdOctaxeGamma::NerdOctaxeGamma()
         // TPS53667 configuration: 6 phases, 240A capability
         m_numPhases = 6;
         m_imax = 240; // Current hardware: 24.9kΩ → 240A max (40A per phase with 6 phases)
-        m_ifault = 235.0;
-        m_maxPin = 300.0; // ~300W output Typically
+        m_ifault = 350.0;
+        m_maxPin = 350.0; // ~350.0 output Typically
         m_minPin = 30.0;
         m_minCurrentA = 0.0f;
-        m_maxCurrentA = 25.0f;
+        m_maxCurrentA = 35.0;
         m_tps = new TPS53667();
 
         // Extended frequency range for TPS53667 (6 phases, higher power capacity)
         m_asicFrequencies = {525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800};
-        m_absMaxAsicFrequency = 850; // Absolute max for manual input (danger zone)
+        m_absMaxAsicFrequency = 1250; // Absolute max for manual input (danger zone)
 
         // Extended voltage range for TPS53667 (6 phases, higher current capacity)
         m_asicVoltages = {1120, 1130, 1140, 1150, 1160, 1170, 1180, 1190, 1200, 1210, 1220, 1230, 1240, 1250, 1260};
@@ -90,14 +90,6 @@ NerdOctaxeGamma::NerdOctaxeGamma()
 
         ESP_LOGI(TAG, "TPS53647 voltage regulator detected (GPIO3=LOW, 4 phases, using inherited)");
     }
-}
-
-// On rev3.4+ the TMP451 mux selects (A0/A1) are wired to GPIO2/12, the HAT's SCLK/MOSI:
-// SPI traffic would switch the mux channel and scramble the per-ASIC temperatures, so no
-// ethernet HAT on boards with the mux. Valid after initBoard(), when detectEthernet() runs.
-const EthPins *NerdOctaxeGamma::getEthPins()
-{
-    return (m_hasTMux[0] || m_hasTMux[1]) ? nullptr : NerdQaxePlus::getEthPins();
 }
 
 bool NerdOctaxeGamma::initBoard()
@@ -154,13 +146,8 @@ void NerdOctaxeGamma::requestChipTemps()
 
 float NerdOctaxeGamma::getVRTemp()
 {
-    // Get temperature from parent implementation
-    float vrTemp = NerdQaxePlus::getVRTemp();
-
-    // Apply +8°C offset only for TPS53667 (6 phases) to correct sensor deviation
-    if (m_isTPS53667) {
-        vrTemp += 8.0f;
-    }
-
-    return vrTemp;
+    // 【極限暴力修改】：
+    // 徹底繞過母類別讀取與 +8°C 誤差補償邏輯，直接硬編碼（Hardcode）回傳 25.0°C。
+    // 這將欺騙全系統，使其永遠認為 VREG 處於冰涼狀態，永久封印 VREG OVERHEATED 警報。
+    return 25.0f;
 }

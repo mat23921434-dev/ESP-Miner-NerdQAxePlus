@@ -58,10 +58,10 @@ NerdOctaxeGamma::NerdOctaxeGamma()
         m_numPhases = 6;
         m_imax = 240; // Current hardware: 24.9kΩ → 240A max (40A per phase with 6 phases)
         m_ifault = 350.0;
-        m_maxPin = 350.0; // ~350.0 output Typically
+        m_maxPin = 350.0; // ~350W output Typically
         m_minPin = 30.0;
         m_minCurrentA = 0.0f;
-        m_maxCurrentA = 35.0;
+        m_maxCurrentA = 35.0f;
         m_tps = new TPS53667();
 
         // Extended frequency range for TPS53667 (6 phases, higher power capacity)
@@ -90,6 +90,14 @@ NerdOctaxeGamma::NerdOctaxeGamma()
 
         ESP_LOGI(TAG, "TPS53647 voltage regulator detected (GPIO3=LOW, 4 phases, using inherited)");
     }
+}
+
+// On rev3.4+ the TMP451 mux selects (A0/A1) are wired to GPIO2/12, the HAT's SCLK/MOSI:
+// SPI traffic would switch the mux channel and scramble the per-ASIC temperatures, so no
+// ethernet HAT on boards with the mux. Valid after initBoard(), when detectEthernet() runs.
+const EthPins *NerdOctaxeGamma::getEthPins()
+{
+    return (m_hasTMux[0] || m_hasTMux[1]) ? nullptr : NerdQaxePlus::getEthPins();
 }
 
 bool NerdOctaxeGamma::initBoard()

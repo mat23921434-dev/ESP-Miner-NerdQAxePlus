@@ -1,4 +1,26 @@
+#include "fan_controller.h"
 
+#include <algorithm>
+#include <math.h>
+
+#include "esp_log.h"
+#include "nvs_config.h"
+
+static const char* TAG = "fan_ctrl";
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+void FanController::applyConfig(int ch)
+{
+    if (!m_pid[ch]) return;
+
+    float p = m_config[ch].pid.p / 100.0f;
+    float i = m_config[ch].pid.i / 100.0f;
+    float d = m_config[ch].pid.d / 100.0f;
+
+    m_pid[ch]->SetTunings(p, i, d);
     m_pid[ch]->SetTarget(static_cast<float>(m_config[ch].pid.targetTemp));
 
     ESP_LOGI(TAG, "ch%d PID: target=%.1f°C p=%.2f i=%.2f d=%.2f",

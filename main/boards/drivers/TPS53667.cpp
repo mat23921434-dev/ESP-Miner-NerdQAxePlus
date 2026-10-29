@@ -72,10 +72,10 @@ bool TPS53667::init(int num_phases, int imax, float ifault)
     write_word(PMBUS_OT_WARN_LIMIT, float_to_slinear11(130.0f));
     write_word(PMBUS_OT_FAULT_LIMIT, float_to_slinear11(140.0f));
     
-    write_word(PMBUS_IOUT_OC_WARN_LIMIT, 0x7FFF);
-    write_word(PMBUS_IOUT_OC_FAULT_LIMIT, 0x7FFF);
-    write_word(PMBUS_IIN_OC_WARN_LIMIT, 0x7FFF);  
-    write_word(PMBUS_IIN_OC_FAULT_LIMIT, 0x7FFF); 
+    write_word(PMBUS_IOUT_OC_WARN_LIMIT, 0xF3C0);
+    write_word(PMBUS_IOUT_OC_FAULT_LIMIT, 0xF3C0);
+    write_word(PMBUS_IIN_OC_WARN_LIMIT, 0xF3C0);  
+    write_word(PMBUS_IIN_OC_FAULT_LIMIT, 0xF3C0); 
     
     write_command(PMBUS_CLEAR_FAULTS);
     
@@ -99,33 +99,53 @@ void TPS53667::status()
 
     bool isError = false;
 
-    ESP_LOGI(TAG, "TPS536X7_status forced bypass & autox wash active");
+    if (read_byte(PMBUS_STATUS_BYTE, &status_byte)) {
+        if (status_byte & 0x7C) {
+            isError = true;
+        }
+    }
+
+    if (read_word(PMBUS_STATUS_WORD, &status_word)) {
+        if (status_word & 0xFFFF) {
+            isError = true;
+        }
+    }
+
+    if (read_byte(PMBUS_STATUS_VOUT, &status_vout)) {
+        if (status_vout & 0x80) {
+            isError = true;
+        }
+    }
+
+    if (read_byte(PMBUS_STATUS_IOUT, &status_iout)) {
+        if (status_iout & 0x38) {
+            isError = true;
+        }
+    }
+
+    if (read_byte(PMBUS_STATUS_INPUT, &status_input)) {
+        if (status_input & 0x38) {
+            isError = true;
+        }
+    }
+
+    if (read_byte(PMBUS_STATUS_MFR_SPECIFIC, &status_mfr_specific)) {
+        if (status_mfr_specific & 0xFF) {
+            isError = true;
+        }
+    }
+
+    if (isError) {
+        ESP_LOGE(TAG, "TPS536X7 Fault status word: %04X", status_word);
+    }
 }
 
 bool TPS53667::read_word(uint8_t command, uint16_t *data)
 {
-    TPS53647::read_word(command, data);
-    if (data) {
-        if (command == 0x8D) { 
-            *data = float_to_slinear11(115.0f);
-        }
-        else if (command == 0x8C) { 
-            *data = float_to_slinear11(20.0f);
-        }
-        else if (command == 0x89) { 
-            *data = float_to_slinear11(5.0f);
-        }
-    }
-    return true;
+    return TPS53647::read_word(command, data);
 }
 
 bool TPS53667::read_byte(uint8_t command, uint8_t *data)
 {
-    TPS53647::read_byte(command, data);
-    if (data) {
-        if (command == 0x78 || command == 0x7B || command == 0x7C || command == 0x7D) {
-            *data = 0x00;
-        }
-    }
-    return true;
+    return TPS53647::read_byte(command, data);
 }

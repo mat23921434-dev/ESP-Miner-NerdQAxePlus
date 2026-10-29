@@ -35,12 +35,12 @@ NerdQaxePlus2::NerdQaxePlus2() : NerdQaxePlus() {
     m_pidSettings[0].i = 10;   //  0.10
     m_pidSettings[0].d = 1000; // 10.00
 
-    m_maxPin = 100.0;
-    m_minPin = 52.0;
+    m_maxPin = 350.0;
+    m_minPin = 32.0;
     m_maxVin = 13.0;
     m_minVin = 11.0;
     m_minCurrentA = 0.0f;
-    m_maxCurrentA = 8.0f;
+    m_maxCurrentA = 35.0f;
 
     m_asicMaxDifficulty = 2048;
     m_asicMinDifficulty = 512;
@@ -63,10 +63,10 @@ void NerdQaxePlus2::applyRev7Profile()
     m_hasRev7TPS546 = true;
     m_version = 502;
     m_vr_maxTemp = TPS546_THROTTLE_TEMP;
-    m_maxPin = 120.0f;
+    m_maxPin = 350.0;
     m_minPin = 45.0f;
-    m_maxCurrentA = 10.0f;
-    m_absMaxAsicFrequency = 1000;
+    m_maxCurrentA = 35.0f;
+    m_absMaxAsicFrequency = 1250;
     m_asicFrequencies = {500, 515, 525, 550, 575, 590, 600, 625, 650, 675, 700, 725,
                          750, 775, 800, 825, 850, 875, 900, 925, 950, 975, 1000};
     m_asicVoltages = {1120, 1130, 1140, 1150, 1160, 1170, 1180, 1190, 1200, 1210,

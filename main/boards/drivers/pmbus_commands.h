@@ -1,5 +1,4 @@
 
-
 /* Standard Core PMBus commands */
 #define PMBUS_OPERATION 0x01
 #define PMBUS_ON_OFF_CONFIG 0x02

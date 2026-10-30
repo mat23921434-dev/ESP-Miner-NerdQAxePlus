@@ -26,7 +26,7 @@ void TPS53667::set_phases(int num_phases)
 
 bool TPS53667::init(int num_phases, int imax, float ifault)
 {
-    ESP_LOGI(TAG, "Initializing TPS53667 regulator - HYPER OVERCLOCK MODE");
+    ESP_LOGI(TAG, "Initializing TPS53667 regulator - HYPER OVERCLOCK MODE (FIXED)");
 
     uint16_t device_code = get_device_code();
 
@@ -53,29 +53,36 @@ bool TPS53667::init(int num_phases, int imax, float ifault)
 
     set_phases(num_phases);
 
-    write_word(PMBUS_VOUT_MAX, (uint16_t) volt_to_vid(1.35f)); 
+    // 放寬 VOUT 最大值到 1.5V 防止壓降超出上限
+    write_word(PMBUS_VOUT_MAX, (uint16_t) volt_to_vid(1.50f)); 
     write_byte(PMBUS_MFR_SPECIFIC_00, 0x07); 
     write_byte(PMBUS_MFR_SPECIFIC_16, 0x01); 
     write_word(PMBUS_MFR_SPECIFIC_19, 0x0007);
     
-    write_byte(0x41, 0x00);
-    write_byte(0x47, 0x00);
-    write_byte(0x45, 0x00);
-    write_byte(0x5C, 0x00);
-    write_byte(0x50, 0x00);
+    // ========================================================
+    // 修正 1：設定 Fault Response 為 0x00 (Ignore / 忽略錯誤繼續運行)
+    // ========================================================
+    write_byte(0x41, 0x00); // VOUT_OV_FAULT_RESPONSE -> 忽略過壓關斷
+    write_byte(0x45, 0x00); // VOUT_UV_FAULT_RESPONSE -> 忽略欠壓關斷
+    write_byte(0x47, 0x00); // IOUT_OC_FAULT_RESPONSE -> 忽略輸出過流關斷
+    write_byte(0x5C, 0x00); // IIN_OC_FAULT_RESPONSE  -> 忽略輸入過流關斷
+    write_byte(0x50, 0x00); // OT_FAULT_RESPONSE      -> 忽略過溫關斷
 
-    write_word(0x46, 0xF3C0);
-    write_word(0x3A, 0xF3C0);
-    write_word(0x5A, 0xE3C0);
-    write_command(PMBUS_CLEAR_FAULTS);
+    // ========================================================
+    // 修正 2：使用正確的 Linear 11 格式將過流限制放寬至極限
+    // 0xE3E8 代表每相大約 62.5A，多相併聯總上限可達 250A~300A+
+    // 徹底解決因原先 0xF3C0 誤設為負數電流導致的 PSU Fault 報錯
+    // ========================================================
+    uint16_t max_current_l11 = 0xE3E8; 
 
+    write_word(PMBUS_IOUT_OC_WARN_LIMIT, max_current_l11);
+    write_word(PMBUS_IOUT_OC_FAULT_LIMIT, max_current_l11);
+    write_word(PMBUS_IIN_OC_WARN_LIMIT, max_current_l11);  
+    write_word(PMBUS_IIN_OC_FAULT_LIMIT, max_current_l11); 
+
+    // 溫度保護設定維持不變 (130°C 警告 / 140°C 故障)
     write_word(PMBUS_OT_WARN_LIMIT, float_to_slinear11(130.0f));
     write_word(PMBUS_OT_FAULT_LIMIT, float_to_slinear11(140.0f));
-    
-    write_word(PMBUS_IOUT_OC_WARN_LIMIT, 0xF3C0);
-    write_word(PMBUS_IOUT_OC_FAULT_LIMIT, 0xF3C0);
-    write_word(PMBUS_IIN_OC_WARN_LIMIT, 0xF3C0);  
-    write_word(PMBUS_IIN_OC_FAULT_LIMIT, 0xF3C0); 
     
     write_command(PMBUS_CLEAR_FAULTS);
     

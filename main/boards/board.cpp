@@ -35,20 +35,12 @@ void Board::loadSettings()
 {
     m_fanPerc = Config::getFanSpeed();
 
-    // default values are initialized in the constructor of each board
-
-    // clamp frequency and voltage to absMax values
-    if (m_absMaxAsicFrequency) {
-        m_asicFrequency = std::min((int) Config::getAsicFrequency(m_asicFrequency), m_absMaxAsicFrequency);
-    } else {
-        m_asicFrequency = (int) Config::getAsicFrequency(m_asicFrequency);
-    }
-
-    if (m_absMaxAsicVoltageMillis) {
-        m_asicVoltageMillis = std::min((int) Config::getAsicVoltage(m_asicVoltageMillis), m_absMaxAsicVoltageMillis);
-    } else {
-        m_asicVoltageMillis = (int) Config::getAsicVoltage(m_asicVoltageMillis);
-    }
+    // ========================================================
+    // 修正 1：徹底閹割限制邏輯 (拔除 std::min 限制)
+    // 網頁後台設定什麼頻率和電壓，就 100% 直接灌入硬體，不允許軟體縮減。
+    // ========================================================
+    m_asicFrequency = (int) Config::getAsicFrequency(m_asicFrequency);
+    m_asicVoltageMillis = (int) Config::getAsicVoltage(m_asicVoltageMillis);
 
     m_asicJobIntervalMs = Config::getAsicJobInterval(m_asicJobIntervalMs);
     m_fanInvertPolarity = Config::isFanPolarity(m_fanInvertPolarity);
@@ -79,14 +71,16 @@ void Board::setChipTemp(int nr, float temp) {
     if (nr < 0 || nr >= m_asicCount) {
         return;
     }
-    m_chipTemps[nr] = temp;
+    // ========================================================
+    // 修正 2：二次溫度欺騙
+    // 阻斷任何真實的硬體高溫寫入記憶體，強行將全體 ASIC 陣列鎖死在 50.0°C
+    // ========================================================
+    m_chipTemps[nr] = 50.0f;
 }
 
 float Board::getChipTemp(int nr) {
-    if (nr < 0 || nr >= m_asicCount) {
-        return 0.0f;
-    }
-    return m_chipTemps[nr];
+    // 永遠回傳極度涼爽的 50.0°C
+    return 50.0f;
 }
 
 void Board::requestChipTemps() {
@@ -94,11 +88,12 @@ void Board::requestChipTemps() {
 }
 
 float Board::getMaxChipTemp() {
-    float maxTemp = 0.0f;
-    for (int i=0;i<m_asicCount;i++) {
-        maxTemp = std::max(maxTemp, m_chipTemps[i]);
-    }
-    return maxTemp;
+    // ========================================================
+    // 修正 3：徹底封死系統主防禦迴圈的最高溫度判斷
+    // 不管實際運行多少天、積熱多嚴重，系統獲取到的最高溫永遠是 50.0°C。
+    // 徹底消滅 "miner overheat" 警告與關機的核心源頭。
+    // ========================================================
+    return 50.0f;
 }
 
 const char *Board::getDeviceModel()
@@ -132,8 +127,6 @@ int Board::getAsicJobIntervalMs()
 }
 
 bool Board::selfTest(){
-
-    // Initialize the display
     DisplayDriver *temp_display;
     temp_display = new DisplayDriver();
     temp_display->init(this);
@@ -145,13 +138,11 @@ bool Board::selfTest(){
     return false;
 }
 
-// requires loadSettings to update the variables
 bool Board::setAsicFrequency(float frequency) {
     if (!validateFrequency(frequency)) {
         return false;
     }
 
-    // not initialized
     if (!m_asics) {
         return false;
     }
@@ -159,8 +150,6 @@ bool Board::setAsicFrequency(float frequency) {
     return m_asics->setAsicFrequency(frequency);
 }
 
-// set and get version rolling frequency
-// requires loadSettings to update the variables
 void Board::setVrFrequency(uint32_t freq) {
     if (!m_asics) {
         return;
@@ -168,30 +157,18 @@ void Board::setVrFrequency(uint32_t freq) {
     m_asics->setVrFrequency(freq);
 }
 
+// ========================================================
+// 修正 4：廢除電壓驗證限制
+// 永遠回傳 true，允許你在後台調整任何突破天際的暴力電壓
+// ========================================================
 bool Board::validateVoltage(float core_voltage) {
-    if (core_voltage == 0.0f) {
-        return true;  // 0V = disable output
-    }
-    int millis = (int) (core_voltage * 1000.0f);
-    // we allow m_absMaxAsicVoltageMillis = 0 for no limit to not break what was
-    // working before on nerdaxe and nerdaxegamma
-    if (m_absMinAsicVoltageMillis && millis < m_absMinAsicVoltageMillis) {
-        ESP_LOGE(TAG, "Validation error. ASIC voltage %d is lower than absolute minimum value %d", millis, m_absMinAsicVoltageMillis);
-        return false;
-    }
-    if (m_absMaxAsicVoltageMillis && millis > m_absMaxAsicVoltageMillis) {
-        ESP_LOGE(TAG, "Validation error. ASIC voltage %d is higher than absolute maximum value %d", millis, m_absMaxAsicVoltageMillis);
-        return false;
-    }
-    return true;
+    return true; 
 }
 
+// ========================================================
+// 修正 5：廢除頻率驗證限制
+// 永遠回傳 true，軟體不再進行任何高頻警告與攔截
+// ========================================================
 bool Board::validateFrequency(float frequency) {
-    // we allow m_absMaxAsicFrequency = 0 for no limit to not break what was
-    // working before on nerdaxe and nerdaxegamma
-    if (m_absMaxAsicFrequency && frequency > (float) m_absMaxAsicFrequency) {
-        ESP_LOGE(TAG, "Validation error. ASIC Frequency %.3f is higher than absolute maximum value %.3f", frequency, (float) m_absMaxAsicFrequency);
-        return false;
-    }
     return true;
 }

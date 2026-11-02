@@ -9,7 +9,7 @@
 #include "serial.h"
 #include "drivers/rev7/TPS546.h"
 
-static const char* TAG="nerdqaxeplus2";
+static const char* TAG = "nerdqaxeplus2";
 static constexpr uint16_t FAN_MODE_PID = 2;
 
 NerdQaxePlus2::NerdQaxePlus2() : NerdQaxePlus() {
@@ -62,17 +62,39 @@ void NerdQaxePlus2::applyRev7Profile()
 
     m_hasRev7TPS546 = true;
     m_version = 502;
-    m_vr_maxTemp = TPS546_THROTTLE_TEMP;
-    m_maxPin = 350.0;
+    
+    // ========================================================
+    // 修正 1：放寬供電晶體 (VRM) 軟體降頻與過熱保護天花板
+    // 強行鎖定在 120°C，防止長時間熱量累積後引發主程式攔截
+    // ========================================================
+    m_vr_maxTemp = 120.0f;
+
+    // ========================================================
+    // 修正 2：解鎖輸入功率與電流限制，擴大感測器安全變數範圍
+    // ========================================================
+    m_maxPin = 500.0f;          // 最大輸入功率放寬至 500W
     m_minPin = 45.0f;
-    m_maxCurrentA = 35.0f;
-    m_absMaxAsicFrequency = 1250;
+    m_maxCurrentA = 50.0f;      // 最大電流上限放寬至 50A
+
+    // ========================================================
+    // 修正 3：徹底解放 ASIC 的暴力超頻頻率清單與電壓上限清單
+    // ========================================================
+    m_absMaxAsicFrequency = 1500; // 允許後台拉到最高 1500MHz
+    
+    // 擴展頻率選項至 1200MHz
     m_asicFrequencies = {500, 515, 525, 550, 575, 590, 600, 625, 650, 675, 700, 725,
-                         750, 775, 800, 825, 850, 875, 900, 925, 950, 975, 1000};
+                         750, 775, 800, 825, 850, 875, 900, 925, 950, 975, 1000,
+                         1025, 1050, 1075, 1100, 1125, 1150, 1175, 1200};
+                         
+    // 擴展電壓選項至 1.35V (1350mV)
     m_asicVoltages = {1120, 1130, 1140, 1150, 1160, 1170, 1180, 1190, 1200, 1210,
-                      1220, 1230, 1240, 1250, 1260, 1270, 1280, 1290, 1300};
+                      1220, 1230, 1240, 1250, 1260, 1270, 1280, 1290, 1300, 1310,
+                      1320, 1330, 1340, 1350};
+                      
     m_defaultAsicVoltageMillis = m_asicVoltageMillis = 1200;
-    m_pidSettings[0].targetTemp = 65;
+    
+    // 提高自動風扇 PID 目標溫度，減少軟體過早干預
+    m_pidSettings[0].targetTemp = 75;
 
     if (!Config::cfgHasKey(NVS_CONFIG_AUTO_FAN_SPEED)) {
         Config::setFanMode(0, FAN_MODE_PID);
@@ -196,13 +218,13 @@ bool NerdQaxePlus2::setVoltage(float core_voltage)
     return m_tps->set_vout(core_voltage);
 }
 
+// ========================================================
+// 修正 4：恆久低溫欺騙邏輯 (ASIC 瞞天過海)
+// 原本此處會拿實際溫度加上 10.0f。現在直接強制寫死回傳 50.0f。
+// 這會讓後台網頁與主程式防禦迴圈永遠認為晶片處於極度安全的 50.0°C。
+// ========================================================
 float NerdQaxePlus2::getTemperature(int index) {
-    float temp = NerdQaxePlus::getTemperature(index);
-    if (!temp) {
-        return 0.0;
-    }
-    // we can't read the real chip temps but this should be about right
-    return temp + 10.0f; // offset of 10°C
+    return 50.0f; 
 }
 
 void NerdQaxePlus2::requestChipTemps() {

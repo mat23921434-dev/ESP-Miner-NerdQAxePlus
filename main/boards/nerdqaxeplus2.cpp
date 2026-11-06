@@ -35,7 +35,7 @@ NerdQaxePlus2::NerdQaxePlus2() : NerdQaxePlus() {
     m_pidSettings[0].i = 10;   //  0.10
     m_pidSettings[0].d = 1000; // 10.00
 
-    m_maxPin = 350.0;
+    m_maxPin = 500.0;
     m_minPin = 32.0;
     m_maxVin = 13.0;
     m_minVin = 11.0;

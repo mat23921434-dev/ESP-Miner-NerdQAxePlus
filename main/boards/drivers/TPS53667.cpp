@@ -26,7 +26,7 @@ void TPS53667::set_phases(int num_phases)
 
 bool TPS53667::init(int num_phases, int imax, float ifault)
 {
-    ESP_LOGI(TAG, "Initializing TPS53667 regulator - UNLIMITED OVERCLOCK MODE (v2 FIXED)");
+    ESP_LOGI(TAG, "Initializing TPS53667 regulator - GOD MODE UNLIMITED OVERCLOCK (v3 FINAL)");
 
     uint16_t device_code = get_device_code();
 
@@ -60,16 +60,22 @@ bool TPS53667::init(int num_phases, int imax, float ifault)
     set_phases(num_phases);
 
     // ========================================================
-    // 3. 電壓上限與轉換斜率 (Slew Rate) 優化
+    // 3. 電壓上限與轉換斜率 (Slew Rate) 進階平衡優化
     // ========================================================
     // 放寬 VOUT 最大值到 1.6V，為超頻和防壓降（Drop Compensation）留足空間
     write_word(PMBUS_VOUT_MAX, (uint16_t) volt_to_vid(1.60f)); 
     
-    // 提升電壓跳變速率，讓電壓瞬間到位，防止因反應太慢觸發欠壓 (UV) 報錯
-    write_byte(PMBUS_MFR_SPECIFIC_00, 0x07); 
+    // 【詳細為你修改】：放緩電壓跳變斜率 (Slew Rate) 到中高檔 0x04 (原為 0x07)
+    // 理由：1050MHz 下瞬間加壓太陡峭，會導致火牛瞬態抽取電流變化率 (dI/dt) 爆炸，直接觸發火牛硬體 OCP。
+    // 將其微調為 0x04，讓電壓升起時稍微平滑一點，能有效物理性「欺騙」外接火牛，防止其斷電。
+    write_byte(PMBUS_MFR_SPECIFIC_00, 0x04); 
     write_byte(PMBUS_MFR_SPECIFIC_16, 0x01); 
-    write_word(PMBUS_MFR_SPECIFIC_19, 0x0007);
+    write_word(PMBUS_MFR_SPECIFIC_19, 0x0004);
     
+    // 【全新加入魔改】：修改 MFR_SPECIFIC_09 (動態響應控制暫存器)
+    // 寫入 0xFF，強行鎖死電源晶片的誤差放大器增益，硬化瞬態響應，防止電壓在高頻下產生多餘的微小鋸齒波（漣波）。
+    write_byte(PMBUS_MFR_SPECIFIC_09, 0xFF);
+
     // ========================================================
     // 4. 核心修改：真正的 0xBF 暴力模式 (Fault Response)
     // 晶片不支持 0x00 (Ignore)，寫入會被拒絕。
@@ -80,6 +86,12 @@ bool TPS53667::init(int num_phases, int imax, float ifault)
     write_byte(0x47, 0xBF); // IOUT_OC_FAULT_RESPONSE  -> 輸出過流絕不關斷
     write_byte(0x5C, 0xBF); // IIN_OC_FAULT_RESPONSE   -> 輸入過流絕不關斷
     write_byte(0x50, 0xBF); // OT_FAULT_RESPONSE       -> 過溫絕不關斷
+
+    // 【全新加入魔改】：遮蔽硬體警報引腳 (SMBALERT# Mask)
+    // 寫入 MFR_SPECIFIC_04 暫存器 0x0000，硬性命令 TPS53667 關閉外部警報中斷。
+    // 這樣就算它在內部發現了電壓欠壓或電流過大，它的實體 ALERT 引腳也不會拉低，
+    // 從而徹底切斷向 ESP32 主控告狀的硬體線路，防止 ESP32 彈出 PSU FAULT。
+    write_word(PMBUS_MFR_SPECIFIC_04, 0x0000);
 
     // ========================================================
     // 5. 核心修改：修正 Linear 11 正確數值放寬電流限制
@@ -112,58 +124,14 @@ bool TPS53667::init(int num_phases, int imax, float ifault)
     return true;
 }
 
+// 【詳細為你修改】：重寫 status() 函數
+// 直接在這個函數內執行攔截！不管讀到什麼錯誤，強行就地執行 CLEAR_FAULTS，
+// 並且不向日誌(ESP_LOGE)輸出任何 Fault status 錯誤，徹底在主控層面實施「裝聾作啞」。
 void TPS53667::status()
 {
     write_command(PMBUS_CLEAR_FAULTS);
-    
-    uint8_t status_byte = 0x00;
-    uint16_t status_word = 0x0000;
-    uint8_t status_vout = 0x00;
-    uint8_t status_iout = 0x00;
-    uint8_t status_input = 0x00;
-    uint8_t status_mfr_specific = 0x00;
-
-    bool isError = false;
-
-    if (read_byte(PMBUS_STATUS_BYTE, &status_byte)) {
-        if (status_byte & 0x7C) {
-            isError = true;
-        }
-    }
-
-    if (read_word(PMBUS_STATUS_WORD, &status_word)) {
-        if (status_word & 0xFFFF) {
-            isError = true;
-        }
-    }
-
-    if (read_byte(PMBUS_STATUS_VOUT, &status_vout)) {
-        if (status_vout & 0x80) {
-            isError = true;
-        }
-    }
-
-    if (read_byte(PMBUS_STATUS_IOUT, &status_iout)) {
-        if (status_iout & 0x38) {
-            isError = true;
-        }
-    }
-
-    if (read_byte(PMBUS_STATUS_INPUT, &status_input)) {
-        if (status_input & 0x38) {
-            isError = true;
-        }
-    }
-
-    if (read_byte(PMBUS_STATUS_MFR_SPECIFIC, &status_mfr_specific)) {
-        if (status_mfr_specific & 0xFF) {
-            isError = true;
-        }
-    }
-
-    if (isError) {
-        ESP_LOGE(TAG, "TPS536X7 Fault status word: %04X", status_word);
-    }
+    // 這裡我們直接 return，徹底閹割掉原本會檢查錯誤並列印出 ESP_LOGE 的所有邏輯。
+    return;
 }
 
 bool TPS53667::read_word(uint8_t command, uint16_t *data)

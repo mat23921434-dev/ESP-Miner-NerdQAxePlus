@@ -57,8 +57,8 @@ NerdOctaxeGamma::NerdOctaxeGamma()
         // TPS53667 configuration: 6 phases, 240A capability
         m_numPhases = 6;
         m_imax = 240; // Current hardware: 24.9kΩ → 240A max (40A per phase with 6 phases)
-        m_ifault = 350.0;
-        m_maxPin = 350.0; // ~350W output Typically
+        m_ifault = 500.0;
+        m_maxPin = 500.0; // ~500W output Typically
         m_minPin = 30.0;
         m_minCurrentA = 0.0f;
         m_maxCurrentA = 35.0f;
